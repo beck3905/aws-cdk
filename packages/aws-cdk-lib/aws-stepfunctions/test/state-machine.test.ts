@@ -144,7 +144,24 @@ describe('State Machine', () => {
             Action: 'states:StartExecution',
             Effect: 'Allow',
             Resource: {
-              Ref: 'MyStateMachine6C968CA5',
+              'Fn::Join': [
+                '',
+                [
+                  'arn:',
+                  {
+                    Ref: 'AWS::Partition',
+                  },
+                  ':states:',
+                  {
+                    Ref: 'AWS::Region',
+                  },
+                  ':',
+                  {
+                    Ref: 'AWS::AccountId',
+                  },
+                  ':stateMachine:*',
+                ],
+              ],
             },
           },
           {
@@ -155,11 +172,21 @@ describe('State Machine', () => {
             Effect: 'Allow',
             Resource: {
               'Fn::Join': [
-                '', [
+                '',
+                [
+                  'arn:',
                   {
-                    Ref: 'MyStateMachine6C968CA5',
+                    Ref: 'AWS::Partition',
                   },
-                  '/*',
+                  ':states:',
+                  {
+                    Ref: 'AWS::Region',
+                  },
+                  ':',
+                  {
+                    Ref: 'AWS::AccountId',
+                  },
+                  ':execution:*/*',
                 ],
               ],
             },
