@@ -459,26 +459,6 @@ export class StateMachine extends StateMachineBase {
     });
     this.stateMachineRevisionId = resource.attrStateMachineRevisionId;
 
-    if (graph.requiresExecutionPermissions) {
-      this.addToRolePolicy(new iam.PolicyStatement({
-        actions: ['states:StartExecution'],
-        resources: [this.stack.formatArn({
-          service: 'states',
-          resource: 'stateMachine',
-          resourceName: '*',
-          arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-        })],
-      }));
-      this.addToRolePolicy(new iam.PolicyStatement({
-        actions: ['states:DescribeExecution', 'states:StopExecution'],
-        resources: [`${this.stack.formatArn({
-          service: 'states',
-          resource: 'execution',
-          resourceName: '*',
-          arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-        })}:*`],
-      }));
-    }
   }
 
   /**
@@ -732,6 +712,9 @@ export class ChainDefinitionBody extends DefinitionBody {
     for (const statement of graph.policyStatements) {
       sfnPrincipal.addToPrincipalPolicy(statement);
     }
+
+    graph.bind(scope, sfnPrincipal);
+
     return {
       definitionString: Stack.of(scope).toJsonString(graph.toGraphJson()),
     };

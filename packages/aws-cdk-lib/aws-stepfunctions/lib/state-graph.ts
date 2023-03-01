@@ -1,7 +1,8 @@
+import { Construct } from 'constructs';
 import { DistributedMap } from './states/distributed-map';
 import { State } from './states/state';
 import * as iam from '../../aws-iam';
-import { Duration } from '../../core';
+import { ArnFormat, Duration, Stack } from '../../core';
 
 /**
  * A collection of connected states
@@ -57,11 +58,6 @@ export class StateGraph {
   private superGraph?: StateGraph;
 
   /**
-   * Informs the state machine whether or not to update role with state machine execution IAM policy
-   */
-  public requiresExecutionPermissions: boolean = false;
-
-  /**
    * @param startState state that gets executed when the state machine is launched
    * @param graphDescription description of the state machine
    */
@@ -78,9 +74,6 @@ export class StateGraph {
   public registerState(state: State) {
     this.registerContainedState(state.stateId, this);
     this.allStates.add(state);
-    if (DistributedMap.isDistributedMap(state)) {
-      this.requiresExecutionPermissions = true;
-    }
   }
 
   /**
@@ -168,4 +161,36 @@ export class StateGraph {
     }
   }
 
+  /**
+   * Binds this StateGraph to the StateMachine it defines and updates state machine permissions
+   */
+  public bind(scope: Construct, sfnPrincipal: iam.IPrincipal) {
+
+    const stack = Stack.of(scope);
+    for (const state of this.allStates) {
+      if (DistributedMap.isDistributedMap(state)) {
+        sfnPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
+          actions: ['states:StartExecution'],
+          resources: [stack.formatArn({
+            service: 'states',
+            resource: 'stateMachine',
+            resourceName: '*',
+            arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+          })],
+        }));
+
+        sfnPrincipal.addToPrincipalPolicy(new iam.PolicyStatement({
+          actions: ['states:DescribeExecution', 'states:StopExecution'],
+          resources: [`${stack.formatArn({
+            service: 'states',
+            resource: 'execution',
+            resourceName: '*',
+            arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+          })}:*`],
+        }));
+
+        break;
+      }
+    }
+  }
 }
