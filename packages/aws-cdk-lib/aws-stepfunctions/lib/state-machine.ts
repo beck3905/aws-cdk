@@ -443,7 +443,7 @@ export class StateMachine extends StateMachineBase {
       roleArn: this.role.roleArn,
       loggingConfiguration: props.logs ? this.buildLoggingConfiguration(props.logs) : undefined,
       tracingConfiguration: props.tracingEnabled ? this.buildTracingConfiguration() : undefined,
-      ...definitionBody.bind(this, this.role, props),
+      ...definitionBody.bind(this, this, props),
       definitionSubstitutions: props.definitionSubstitutions,
     });
     resource.applyRemovalPolicy(props.removalPolicy, { default: RemovalPolicy.DESTROY });
@@ -667,7 +667,7 @@ export abstract class DefinitionBody {
     return new ChainDefinitionBody(chainable);
   }
 
-  public abstract bind(scope: Construct, sfnPrincipal: iam.IPrincipal, sfnProps: StateMachineProps): DefinitionConfig;
+  public abstract bind(scope: Construct, stateMachine: StateMachine, sfnProps: StateMachineProps): DefinitionConfig;
 }
 
 export class FileDefinitionBody extends DefinitionBody {
@@ -675,7 +675,7 @@ export class FileDefinitionBody extends DefinitionBody {
     super();
   }
 
-  public bind(scope: Construct, _sfnPrincipal: iam.IPrincipal, _sfnProps: StateMachineProps): DefinitionConfig {
+  public bind(scope: Construct, _stateMachine: StateMachine, _sfnProps: StateMachineProps): DefinitionConfig {
     const asset = new s3_assets.Asset(scope, 'DefinitionBody', {
       path: this.path,
       ...this.options,
@@ -694,7 +694,7 @@ export class StringDefinitionBody extends DefinitionBody {
     super();
   }
 
-  public bind(_scope: Construct, _sfnPrincipal: iam.IPrincipal, _sfnProps: StateMachineProps): DefinitionConfig {
+  public bind(_scope: Construct, _stateMachine: StateMachine, _sfnProps: StateMachineProps): DefinitionConfig {
     return {
       definitionString: this.body,
     };
@@ -706,14 +706,14 @@ export class ChainDefinitionBody extends DefinitionBody {
     super();
   }
 
-  public bind(scope: Construct, sfnPrincipal: iam.IPrincipal, sfnProps: StateMachineProps): DefinitionConfig {
+  public bind(scope: Construct, stateMachine: StateMachine, sfnProps: StateMachineProps): DefinitionConfig {
     const graph = new StateGraph(this.chainable.startState, 'State Machine definition');
     graph.timeout = sfnProps.timeout;
     for (const statement of graph.policyStatements) {
-      sfnPrincipal.addToPrincipalPolicy(statement);
+      stateMachine.role.addToPrincipalPolicy(statement);
     }
 
-    graph.bind(scope, sfnPrincipal);
+    graph.bind(stateMachine);
 
     return {
       definitionString: Stack.of(scope).toJsonString(graph.toGraphJson()),
