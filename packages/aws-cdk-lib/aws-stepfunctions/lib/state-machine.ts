@@ -443,7 +443,7 @@ export class StateMachine extends StateMachineBase {
       roleArn: this.role.roleArn,
       loggingConfiguration: props.logs ? this.buildLoggingConfiguration(props.logs) : undefined,
       tracingConfiguration: props.tracingEnabled ? this.buildTracingConfiguration() : undefined,
-      ...definitionBody.bind(this, this, props),
+      ...definitionBody.buildDefinition(this),
       definitionSubstitutions: props.definitionSubstitutions,
     });
     resource.applyRemovalPolicy(props.removalPolicy, { default: RemovalPolicy.DESTROY });
@@ -458,6 +458,8 @@ export class StateMachine extends StateMachineBase {
       arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
     this.stateMachineRevisionId = resource.attrStateMachineRevisionId;
+
+    definitionBody.bind(this, props);
 
   }
 
@@ -667,7 +669,9 @@ export abstract class DefinitionBody {
     return new ChainDefinitionBody(chainable);
   }
 
-  public abstract bind(scope: Construct, stateMachine: StateMachine, sfnProps: StateMachineProps): DefinitionConfig;
+  public bind(_stateMachine: StateMachine, _sfnProps: StateMachineProps) {};
+
+  public abstract buildDefinition(scope: Construct): DefinitionConfig;
 }
 
 export class FileDefinitionBody extends DefinitionBody {
@@ -675,7 +679,7 @@ export class FileDefinitionBody extends DefinitionBody {
     super();
   }
 
-  public bind(scope: Construct, _stateMachine: StateMachine, _sfnProps: StateMachineProps): DefinitionConfig {
+  public buildDefinition(scope: Construct): DefinitionConfig {
     const asset = new s3_assets.Asset(scope, 'DefinitionBody', {
       path: this.path,
       ...this.options,
@@ -694,7 +698,7 @@ export class StringDefinitionBody extends DefinitionBody {
     super();
   }
 
-  public bind(_scope: Construct, _stateMachine: StateMachine, _sfnProps: StateMachineProps): DefinitionConfig {
+  public buildDefinition(_scope: Construct): DefinitionConfig {
     return {
       definitionString: this.body,
     };
@@ -702,21 +706,28 @@ export class StringDefinitionBody extends DefinitionBody {
 }
 
 export class ChainDefinitionBody extends DefinitionBody {
+  private readonly graph: StateGraph;
+
   constructor(public readonly chainable: IChainable) {
     super();
+
+    this.graph = new StateGraph(this.chainable.startState, 'State Machine definition');
   }
 
-  public bind(scope: Construct, stateMachine: StateMachine, sfnProps: StateMachineProps): DefinitionConfig {
-    const graph = new StateGraph(this.chainable.startState, 'State Machine definition');
-    graph.timeout = sfnProps.timeout;
-    for (const statement of graph.policyStatements) {
+  public buildDefinition(scope: Construct): DefinitionConfig {
+    return {
+      definitionString: Stack.of(scope).toJsonString(this.graph.toGraphJson()),
+    };
+  }
+
+  public bind(stateMachine: StateMachine, sfnProps: StateMachineProps) {
+
+    this.graph.timeout = sfnProps.timeout;
+    for (const statement of this.graph.policyStatements) {
       stateMachine.role.addToPrincipalPolicy(statement);
     }
 
-    graph.bind(stateMachine);
+    this.graph.bind(stateMachine);
 
-    return {
-      definitionString: Stack.of(scope).toJsonString(graph.toGraphJson()),
-    };
   }
 }
